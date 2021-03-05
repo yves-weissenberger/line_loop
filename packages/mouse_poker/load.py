@@ -164,7 +164,7 @@ def _parse_dat(text):
 
         dtype = 'port'
     elif 'NOWSTATE' in text:
-        now = int(re.findall('_NOWSTATE_([0-9]{1,2})',text)[0])
+        now = int(re.findall('_POKEDSTATE_([0-9]{1,2})',text)[0])  #YW change for NAVI used to be '_NOWSTATE_([0-9]{1,2})'
         avail = eval(re.findall('_AVAILSTATES_(\[.*?\])',text)[0])
         prev = eval(re.findall('_PREVSTATE[S]?_([\[]?.*?[\]]?)_',text)[0])
         dtype = 'state'
