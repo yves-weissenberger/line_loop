@@ -185,7 +185,7 @@ def _parse_dat(text):
     else:
         teleport = False
 
-    return now,avail,dtype,teleport,probe,prev
+    return now,avail,dtype,teleport,probe
 
 
 def parse_data(lines,experiment_name):
@@ -248,12 +248,7 @@ def parse_data(lines,experiment_name):
                     dat = re.findall('P [-0-9]* (.*)\n',l)[0]
                     if 'POKE' in dat and 'TELEPORT' not in dat:
 
-                        now,avail,dtype,teleport,probe, prev = _parse_dat(dat)
-
-                        if 'NAVI' in experiment_name:  #NEW YW 11 MARCH 21
-                            if dtype=='state':
-                                if dat_dict['rew_list'][-1]:
-                                    dat_dict['state'].append([prev,avail,tmp_t,None])
+                        now,avail,dtype,teleport,probe = _parse_dat(dat)
 
                         if dtype=='port':
                             if '_REW_True' in l:
