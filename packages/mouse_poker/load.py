@@ -107,7 +107,9 @@ def load_df(ROOT):
 
 
 def get_metadata(lines):
-    """ Get metadata from the beginning of the file """
+    """ Get metadata from the beginning of the file. The code loops through all data in the file
+        and gets data from the beginning and end of the file.
+    """
     
     summary_lines = []
     experiment_name = task_name = subject_id = task_nr = graph = lineloop = date = test = None
@@ -155,7 +157,26 @@ def _get_summary_dict(summary):
     return summary_dict
 
 def _parse_dat(text):
-    """ function that takes data in and returns meaningful stuff """
+    """ function that takes lines parsed by re and converts them into
+        meaningful form for interpreting the task
+
+            Arguments:
+            =============================
+                text (str): print line outputted by pycontol containing data about pokes or states
+
+            Returns:
+            ============================
+                now (int):        the current state (or port) that the subject is in
+
+                avail (int|list): the pokes or states that are available for the animal to visit next
+
+                dtype (str):      whether the input line refers to pokes or states
+
+                teleport (bool):  legacy, ignore
+
+                probe (bool):     whether the current trial is a probe trial or not
+
+    """
 
     if 'POKEDPORT' in text:
         now = int(re.findall('POKEDPORT_([0-9]{1,2})',text)[0])
@@ -189,6 +210,26 @@ def _parse_dat(text):
 
 
 def parse_data(lines,experiment_name):
+
+    """
+    Main function that takees in evaluated lines from a pycontrol text file and returns events in an interpretable format
+
+    Arguments:
+
+        lines (list):           list of lines in the textfile outputted by f.readlines()
+        experiment_name (str):  name of the current experiment, used for conditional parsing or data
+
+    Returns:
+        dat_dict (dict):    dictionary containing states, ports etc in a simple format for further processing
+
+        events (list):      pycontrol events that occurred (e.g. timers, pokes etc)
+
+        event_times (list): timestamps corresponding to entries in events
+
+        nRews (int):        number of rewards received in a session
+        
+        event_dict (dict):  event data in dictionary format
+    """
     start_read = False #placeholder variable that ignores the period where just free rewards are available
     event_times = []
     events = []
