@@ -141,6 +141,7 @@ def get_metadata(lines):
 
 
 def _get_summary_dict(summary):
+    """ Takes in lines that are summary variables and returns"""
     summary_dict = {}
     for i in summary:
         try:
@@ -227,7 +228,7 @@ def parse_data(lines,experiment_name):
         event_times (list): timestamps corresponding to entries in events
 
         nRews (int):        number of rewards received in a session
-        
+
         event_dict (dict):  event data in dictionary format
     """
     start_read = False #placeholder variable that ignores the period where just free rewards are available
