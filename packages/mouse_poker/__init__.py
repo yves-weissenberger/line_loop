@@ -8,3 +8,4 @@ from . import proc
 from . import utils
 from . import ephys_load
 from . import navi
+from . import simulation

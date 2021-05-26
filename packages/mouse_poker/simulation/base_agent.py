@@ -1,5 +1,5 @@
 import numpy as np
-
+from .sim_utils import get_modulo_distance
 
 class base_agent(object):
     """
