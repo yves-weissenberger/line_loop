@@ -1,7 +1,7 @@
 import numpy as np
 
 from .navi import extract_navi_dat, get_transition_matrix
-from .navi_utils import get_st_dist
+from .navi_utils import get_st_dist, policy_changed_with_rew_loc
 
 
 def first_block_model_based_batch(all_fs,ignore_distance=False,
@@ -16,7 +16,7 @@ def first_block_model_based_batch(all_fs,ignore_distance=False,
         with open(fpath,'r') as f:
             lines = f.readlines()
         state_seq, rew_list, _,forced_seq = extract_navi_dat(lines)
-        perf_tmp,trial_ctr_tmp = run_first_block_model_based_analysis(state_seq,rew_list,forced_seq,
+        perf_tmp,trial_ctr_tmp = first_block_model_based_analysis(state_seq,rew_list,forced_seq,
                                                                       ignore_distance,ignore_first_visit,
                                                                       ignore_has_updated,verbose)
 
@@ -25,7 +25,7 @@ def first_block_model_based_batch(all_fs,ignore_distance=False,
     return perf, trial_ctr
 
 
-def run_first_block_model_based_analysis(state_seq,rew_list,forced_seq,ignore_distance=False,ignore_first_visit=False,ignore_has_updated=True,verbose=False):
+def first_block_model_based_analysis(state_seq,rew_list,forced_seq,ignore_distance=False,ignore_first_visit=False,ignore_has_updated=True,verbose=False):
 
     """ Check whether behaviour is model based.
     
@@ -108,3 +108,154 @@ def run_first_block_model_based_analysis(state_seq,rew_list,forced_seq,ignore_di
         prev_rew_loc = rew_loc
 
     return perf,trial_ctr
+
+
+
+
+def model_based_batch(all_fs,ignore_distance=False,
+                    ignore_first_visit=False,ignore_has_updated=True,
+                    verbose=False,minNrew=15):
+    """ Run the main model based analysis on a dataset"""
+    perf = 0
+    trial_ctr = 0
+    prob_array_for_pois_binom = []
+    choices = []
+
+    for fpath in all_fs:
+
+        with open(fpath,'r') as f:
+            lines = f.readlines()
+        state_seq, rew_list, _,forced_seq = extract_navi_dat(lines)
+        res = model_based_analysis_single_session(state_seq,rew_list,forced_seq,
+                                                  ignore_distance=ignore_distance,
+                                                  ignore_first_visit=ignore_first_visit,
+                                                  ignore_has_updated=ignore_has_updated,
+                                                  verbose=verbose,
+                                                  minNrew=minNrew)
+        perf_tmp, trial_ctr_tmp, prob_array_for_pois_binom_tmp, choices_tmp = res
+
+        perf += perf_tmp
+        trial_ctr += trial_ctr_tmp
+        prob_array_for_pois_binom.extend(prob_array_for_pois_binom_tmp)
+        choices.extend(choices_tmp)
+    return perf, trial_ctr, prob_array_for_pois_binom, choices
+
+
+def model_based_analysis_single_session(state_seq,rew_list,forced_seq,
+                                        ignore_distance=False,ignore_first_visit=False,ignore_has_updated=True,
+                                        minNrew=15,use_block_transitions=False,verbose=False,):
+    """ Check for model based behaviour on trials"""
+
+
+    #define variables that will be output
+    prob_array_for_pois_binom = []
+    choices = []
+    perf = 0
+    trial_ctr = 0
+
+    transition_mtx,_,_,_= get_transition_matrix(state_seq,
+                                                rew_list,
+                                                forced_seq,
+                                                minNrew=minNrew)
+
+
+
+    #organise data into trials
+    rewarded_pokes = np.where(rew_list)[0]
+    trial_starts = np.concatenate([[0],rewarded_pokes[:-1]])
+    trial_ends = rewarded_pokes
+
+
+    #initialise variables
+    prev_rew_loc = None  #this is the reward location that was last updated
+    direction = None
+    has_updated = False
+    same_as_prev_pol = True
+    exp_dirs = []
+    prev_block_start = 0
+    block_start = 0
+
+    for st,nd in zip(trial_starts,trial_ends):
+
+        rew_loc = state_seq[nd]  #this is state that is rewarded
+
+        prev_direction = direction
+
+        if rew_loc!=prev_rew_loc:
+            #print("HERE")
+            direction = None
+            has_updated = False
+            prev_direction = None
+            exp_dirs = [] #experienced directions
+            prev_diff_rew_loc = prev_rew_loc
+            visited_states = []
+            prev_block_start = block_start
+            block_start = st
+
+
+        direction = (rew_loc - state_seq[st+1])>0 #which side are you approaching the reward from
+        visited_states = []
+
+
+        for pk_ctr in range(st+1,nd):  #for each poke between two rewards  
+
+            d0,d1,_ = get_st_dist(state_seq,pk_ctr,rew_loc)
+            free_choice_trial = forced_seq[pk_ctr] is False
+            state = state_seq[pk_ctr]
+            next_state = state_seq[pk_ctr+1]
+            same_as_prev_pol = policy_changed_with_rew_loc(pk_ctr,state_seq,rew_loc,prev_diff_rew_loc)
+
+            inclusion_condition_list = [free_choice_trial,              #NOT a forced trial
+                                     prev_diff_rew_loc is not None,  #ignore first block in session
+                                     not same_as_prev_pol,           #ensure that this a policy change is required to make correct decision
+                                     prev_direction is not None,     #make sure NOT looking at first run-to-rew after a block transition (when rew_loc is unknown)
+                                     direction not in exp_dirs,      #hasn't experienced this direction in this block yet
+                                     (ignore_has_updated or (not has_updated)),               #toggle if only look at first relevant POKE in block
+                                     (ignore_first_visit or (state not in visited_states)),    #look only at first visits to each state
+                                     (ignore_distance or (d0>1)),
+                                     state!=rew_loc,  #this is necessary due to a bug in the code
+                                     ]
+
+
+            if all(inclusion_condition_list):
+                
+                if use_block_transitions:
+                    
+                    transition_mtx,_,_,_= get_transition_matrix(state_seq[prev_block_start:block_start],
+                                                                rew_list[prev_block_start:block_start],
+                                                                forced_seq[prev_block_start:block_start],
+                                                                minNrew=minNrew)
+
+                    
+                choice_correct = int(d1<d0)
+                perf += choice_correct
+                trial_ctr += 1
+                t_p = transition_mtx[prev_diff_rew_loc,state,next_state]
+                
+                #because we are counting the sum of correct choices, need to look at probability of correct choice
+                #under previous model, not of empirical transition
+                if not choice_correct:
+                    t_p = 1-t_p
+                
+                #only include
+                if not np.isnan(t_p):
+                    prob_array_for_pois_binom.append(t_p)
+                    choices.append(int(d1<d0))
+
+                #this is print command to make sure everything is working correctyl.
+                if verbose:
+                    print(("!"*80 + "\n")*3)
+                    print_list = (state,state_seq[pk_ctr+1],rew_loc,prev_diff_rew_loc,choice_correct,np.round(t_p,decimals=2))
+                    print('state:{},nextstate:{},rew_loc:{},prev_rew_loc:{},correct:{},prev_tp:{}'.format(*print_list))
+                    #print(pk_ctr,os.path.split(fpath)[-1])
+                    print(state_seq[st+1:nd+1])
+                    print('\n')
+
+                has_updated = True  #if decisions from this block have led to updated
+
+            visited_states.append(state)
+
+        if direction not in exp_dirs:
+            exp_dirs.append(direction)
+        prev_rew_loc = rew_loc
+    return perf, trial_ctr, prob_array_for_pois_binom, choices
