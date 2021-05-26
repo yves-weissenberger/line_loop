@@ -1,6 +1,6 @@
-import re
 import os
-import matplotlib.pyplot as plt
+import re
+
 import numpy as np
 
 
@@ -176,21 +176,30 @@ def extract_navi_dat(lines):
     return state_seq, rew_list, port_seq,forced_seq
 
 
-def get_transitions(state_seq,rew_list,port_seq,forced_seq,rew_indices,map_poke_to_state,minNrew=5,set_rew_indices=None,firstOnly=False):
+def get_transition_matrix(state_seq,rew_list,forced_seq,minNrew=0,set_rew_indices=None,firstOnly=False):
     """ This function obtains empirical counts for transitions from a given state to another
         as a function of """
-    used_states = sorted([i[1] for i in map_poke_to_state.args[0]])
-    if set_rew_indices is None: set_rew_indices=used_states
+    #used_states = sorted([i[1] for i in map_poke_to_state.args[0]])
+    if set_rew_indices is None: set_rew_indices=list(range(9))
     perf = np.zeros([9,9,9])
     perf_ctr = np.zeros([9,9,9])
     rew_hist = []
-    transition_mtx = np.zeros([9,9,9])
+    transition_counts = np.zeros([9,9,9])
     state_ctr = np.zeros([9,9])
     all_rew_loc = []
-    for rew_ctr,(st,nd) in enumerate(zip(np.where(rew_list)[0][:-2],np.where(rew_list)[0][1:-1])):
+    
+    #organise data into trials
+    rewarded_pokes = np.where(rew_list)[0]
+    trial_starts = np.concatenate([[0],rewarded_pokes[:-1]])
+    trial_ends = rewarded_pokes
+    
+
+    for rew_ctr,(st,nd) in enumerate(zip(trial_starts,trial_ends)):
+        #print(1)
+        
         rew_loc = state_seq[nd]
+        #print(rew_loc)
         if (rew_loc in set_rew_indices):
-            c_rew_index = rew_indices.index(port_seq[nd])
             all_rew_loc.append(rew_loc)
             if not rew_hist:
                 rew_hist.append(rew_loc)
@@ -202,19 +211,24 @@ def get_transitions(state_seq,rew_list,port_seq,forced_seq,rew_indices,map_poke_
             has_visited= []
             if len(rew_hist)>minNrew:
 
-                for pk_ctr in range(st+1,nd+1):
+                for pk_ctr in range(st+1,nd):
                     if not forced_seq[pk_ctr]:
                         state = state_seq[pk_ctr]
                         if state not in has_visited:
 
                             next_state = state_seq[pk_ctr+1]
+                            #if rew_loc==3:
+                            #    print(state,next_state)
 
-                            transition_mtx[state,next_state,rew_loc] += 1
+                            transition_counts[state,next_state,rew_loc] += 1
                             state_ctr[state,rew_loc] += 1
                             if firstOnly: has_visited.append(state)
 
-    
-    return transition_mtx, state_ctr, np.unique(all_rew_loc)
+    transition_mtx = np.array([(transition_counts/state_ctr[:,None])[:,:,i]
+                       for i in range(9)])
+    state_ctr = np.array([state_ctr[:,i] for i in range(9)])
+
+    return transition_mtx, transition_counts, state_ctr, np.unique(all_rew_loc)
 
 
 
@@ -242,68 +256,3 @@ def get_trajectories(state_seq,rew_list,port_seq,forced_seq,used_states):
     return decision_seq, forced
 
 
-
-import numpy as np
-from math import atan2,sqrt,log,cos,sin,exp,pi
-from scipy.fft import fft
-
-class PoissonBinomial:
-    """
-    The poisson binomial distribution is essentially a binomial
-    distribution where the probability of success on each trial
-    is not necessarily identically distributed. This implementation
-    and results are checked against https://github.com/tsakim/poibin/blob/master/poibin.py
-    If all ps in prob_array are equal, this distribution reverts to the
-    binomial distribution. This resultant p-values have also been checked 
-    against the scipy implementation
-    
-    from https://pypi.org/project/poisson-binomial/#files
-    """
-    def __init__(self,prob_array):
-        self.p = np.array(prob_array)
-        self.pmf = self.get_poisson_binomial()
-        self.cdf = np.cumsum(self.pmf)
-        
-    def x_or_less(self,x):
-        return self.cdf[x]
-    def x_or_more(self,x):
-        return 1-self.cdf[x]+self.pmf[x]
-
-    def get_poisson_binomial(self):
-
-        """This version of the poisson_binomial is implemented 
-        from the fast fourier transform method described in 
-        'On computing the distribution function for the 
-        Poisson binomial distribution'by Yili Hong 2013."""
-
-        real = np.vectorize(lambda x: x.real)
-
-        def x(w,l):
-            v_atan2 = np.vectorize(atan2)
-            v_sqrt = np.vectorize(sqrt)
-            v_log = np.vectorize(log)
-
-            if l==0:
-                return complex(1,0)
-            else:
-
-                wl = w*l
-                real = 1+self.p*(cos(wl)-1)
-                imag = self.p*sin(wl)
-                mod = v_sqrt(imag**2+real**2)
-                arg = v_atan2(imag,real)
-                d = exp((v_log(mod)).sum())
-                arg_sum = arg.sum()
-                a = d*cos(arg_sum)
-                b = d*sin(arg_sum)
-                return complex(a,b)
-
-        n = self.p.size 
-        w = 2*pi/(1+n)
-
-        xs = [x(w,i) for i in range((n+1)//2+1)]
-        for i in range((n+1)//2+1,n+1):
-            c = xs[n+1-i]
-            xs.append(c.conjugate())
-
-        return real(fft(xs))/(n+1)

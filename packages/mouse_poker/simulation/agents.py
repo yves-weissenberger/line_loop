@@ -2,8 +2,8 @@ import numpy as np
 from .base_agent import base_agent
 
 class diffusion_agent(base_agent):
-    """ This agent simply makes random choices at each time point"""
-   
+    """ This agent simply makes random choices at each time point."""
+
     def do_policy(self):
         self.current_state = np.random.choice(self.available_states)
 
@@ -14,9 +14,10 @@ class towards_middle_agent(base_agent):
         this is the simplest possible implementation that samples a direction and 
         sticks with it. You could imagine one where you essentially calculate values based on 
         number of states available and then make a direction decision at each point. 
-        Additionally, you can just add stochasticity at all points (i.e. go in direction and change direction)
+        Additionally, you can just add stochasticity at all points 
+        (i.e. go in direction and change direction)
     """
-       
+   
     def do_policy(self):
         if self.task_params['graph_type']=='line':
             
@@ -44,7 +45,7 @@ class towards_middle_agent(base_agent):
 
 
 class Qlearner(base_agent):
-    """ Single-step Q-learning agent"""
+    """ Single-step Q-learning agent. This doesn't work, something is buggy"""
     def __init__(self,learning_params=None,task_params=None):
         super().__init__(learning_params,task_params)
         self.sigmoid = lambda x: 1/(1+np.exp(-(x[1]-x[0])))
@@ -60,8 +61,8 @@ class Qlearner(base_agent):
     def do_policy(self):
         self.prev_state = self.current_state + 0
         if len(self.available_states)==2:
-            p_ = self.sigmoid(self.Q_values[self.current_state])
-            choice = np.random.choice([0,1],p=[1-p_,p_])
+            p = self.sigmoid(self.Q_values[self.current_state])
+            choice = np.random.choice([0,1],p=[1-p,p])
             self.current_state = self.available_states[choice]
         else:
             choice = self.current_state==0
@@ -114,6 +115,7 @@ class Model_based_agent(base_agent):
                     d0 = get_modulo_distance(self.known_reward_location,
                                             self.available_states[0],
                                             nStates=self.task_params['len_graph'])
+
                     d1 = get_modulo_distance(self.known_reward_location,
                                             self.available_states[1],
                                             nStates=self.task_params['len_graph'])

@@ -1,6 +1,11 @@
 import itertools
 
 def get_empty_transition_dict(n_nodes=9,n_tasks=2):
+    """ This generates a dictionary in which to store probe trial
+        performance on the follow the light task. The keys are strings
+        in the form of startingState_nextState and values are initialised
+        as empty lists
+    """
     tmp1 = [str(i[1])+str(i[-2]) for i in list(itertools.combinations(range(n_nodes),2))]
     tmp1.extend([i[::-1] for i in tmp1])
 
