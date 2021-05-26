@@ -92,7 +92,7 @@ class Model_based_agent(base_agent):
         this stochastic or do something else."""
     def __init__(self,learning_params=None,task_params=None):
         super().__init__()
-        self.known_reward_location = False
+        self.known_reward_location = None
 
     def exploration_policy(self):
         """ explore the environment randomly"""
@@ -100,7 +100,7 @@ class Model_based_agent(base_agent):
 
     def do_policy(self):
         """ Run the policy """
-        if not self.known_reward_location:
+        if self.known_reward_location is None:
             self.exploration_policy()
         else:
         
