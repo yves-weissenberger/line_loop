@@ -114,7 +114,8 @@ def first_block_model_based_analysis(state_seq,rew_list,forced_seq,ignore_distan
 
 def model_based_batch(all_fs,ignore_distance=False,
                     ignore_first_visit=False,ignore_has_updated=True,
-                    use_block_transitions=False,if_is_rew_loc=False,
+                    use_block_transitions=False,if_is_rew_loc=True,
+                    ignore_prev_rew_loc_in_seq=False,
                     verbose=False,minNrew=15,min_rew_in_session=0):
     """ Run the main model based analysis on a dataset
     
@@ -136,7 +137,7 @@ def model_based_batch(all_fs,ignore_distance=False,
     ignore_has_updated (bool):           if True, only look at the very first decision (rather than the first run to reward)
                                          after a rew location transitions that meets all criteria
 
-    minNrew (int):                       when calculating what the transition would have been
+    minNrew (int):                       when calculating what the transition would have been,
 
     use_block_transitions (bool):        if True, will calculat the transition matrix for each block
     """
@@ -151,11 +152,13 @@ def model_based_batch(all_fs,ignore_distance=False,
             lines = f.readlines()
         state_seq, rew_list, _,forced_seq = extract_navi_dat(lines)
         if np.sum(rew_list)>min_rew_in_session:
+            #print(fpath)
             res = model_based_analysis_single_session(state_seq,rew_list,forced_seq,
                                                     ignore_distance=ignore_distance,
                                                     ignore_first_visit=ignore_first_visit,
                                                     ignore_has_updated=ignore_has_updated,
                                                     use_block_transitions=use_block_transitions,
+                                                    ignore_prev_rew_loc_in_seq=ignore_prev_rew_loc_in_seq,
                                                     verbose=verbose,
                                                     if_is_rew_loc=if_is_rew_loc,
                                                     minNrew=minNrew)
@@ -171,8 +174,9 @@ def model_based_batch(all_fs,ignore_distance=False,
 def model_based_analysis_single_session(state_seq,rew_list,forced_seq,
                                         ignore_distance=False,ignore_first_visit=False,
                                         ignore_has_updated=True,
+                                        ignore_prev_rew_loc_in_seq=False,
                                         minNrew=15,use_block_transitions=False,
-                                        if_is_rew_loc=False,verbose=False,):
+                                        if_is_rew_loc=True,verbose=False,):
     """ Check for model based behaviour on trials"""
 
 
@@ -224,6 +228,7 @@ def model_based_analysis_single_session(state_seq,rew_list,forced_seq,
 
         direction = (rew_loc - state_seq[st+1])>0 #which side are you approaching the reward from
         visited_states = []
+        prev_rew_loc_in_seq = False
 
 
         for pk_ctr in range(st+1,nd):  #for each poke between two rewards  
@@ -232,6 +237,11 @@ def model_based_analysis_single_session(state_seq,rew_list,forced_seq,
             free_choice_trial = forced_seq[pk_ctr]==False
             state = state_seq[pk_ctr]
             next_state = state_seq[pk_ctr+1]
+            
+            if ((not prev_rew_loc_in_seq) and (state==prev_diff_rew_loc)):
+                prev_rew_loc_in_seq = True
+
+
             same_as_prev_pol = policy_changed_with_rew_loc(pk_ctr,state_seq,rew_loc,prev_diff_rew_loc,if_is_rew_loc=if_is_rew_loc)
             if np.abs(state-next_state)!=1:
                 print(state,next_state,rew_list[pk_ctr])
@@ -245,6 +255,7 @@ def model_based_analysis_single_session(state_seq,rew_list,forced_seq,
                                      (ignore_first_visit or (state not in visited_states)),    #look only at first visits to each state
                                      (ignore_distance or (d0>1)),
                                      state!=rew_loc,  #this is necessary due to a bug in the code
+                                     ((ignore_prev_rew_loc_in_seq) or (not prev_rew_loc_in_seq)),
                                      ]
 
             
@@ -282,9 +293,13 @@ def model_based_analysis_single_session(state_seq,rew_list,forced_seq,
                 if verbose:
                     print(("!"*80 + "\n")*3)
                     print_list = (state,state_seq[pk_ctr+1],rew_loc,prev_diff_rew_loc,choice_correct,np.round(t_p,decimals=2))
+                    print('direction:{},exp_dirs:'.format(direction) + str(exp_dirs))
+                    print('sapp:{}'.format(same_as_prev_pol))
+                    print('prev_rew_loc_in_seq:{}'.format(prev_rew_loc_in_seq))
                     print('state:{},nextstate:{},rew_loc:{},prev_rew_loc:{},correct:{},prev_tp:{}'.format(*print_list))
                     #print(pk_ctr,os.path.split(fpath)[-1])
-                    print(state_seq[st+1:nd+1])
+                    print(state_seq[st+1:nd+1],st)
+
                     print('\n')
 
                 has_updated = True  #if decisions from this block have led to updated
