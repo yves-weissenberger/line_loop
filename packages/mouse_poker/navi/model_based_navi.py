@@ -114,8 +114,32 @@ def first_block_model_based_analysis(state_seq,rew_list,forced_seq,ignore_distan
 
 def model_based_batch(all_fs,ignore_distance=False,
                     ignore_first_visit=False,ignore_has_updated=True,
-                    verbose=False,minNrew=15):
-    """ Run the main model based analysis on a dataset"""
+                    use_block_transitions=False,if_is_rew_loc=False,
+                    verbose=False,minNrew=15,min_rew_in_session=0):
+    """ Run the main model based analysis on a dataset
+    
+    
+    Arguments:
+    ==============================
+
+    ignore_first_visit (bool):           if True, then will include every visit to a given state (in one run)
+                                         not just the first visit
+    
+    ignore_distance (bool):              if False, will only include decisions where the distance to reward 
+                                         was greater than 1.
+    
+    if_is_rew_loc (bool):                When calculating if the required policy with the current reward location
+                                         is different to the previous_rew_location, there is ambiguity about what
+                                         to do when you are in the previously rewarded state. This determines what
+                                         happens in this case.
+
+    ignore_has_updated (bool):           if True, only look at the very first decision (rather than the first run to reward)
+                                         after a rew location transitions that meets all criteria
+
+    minNrew (int):                       when calculating what the transition would have been
+
+    use_block_transitions (bool):        if True, will calculat the transition matrix for each block
+    """
     perf = 0
     trial_ctr = 0
     prob_array_for_pois_binom = []
@@ -126,24 +150,29 @@ def model_based_batch(all_fs,ignore_distance=False,
         with open(fpath,'r') as f:
             lines = f.readlines()
         state_seq, rew_list, _,forced_seq = extract_navi_dat(lines)
-        res = model_based_analysis_single_session(state_seq,rew_list,forced_seq,
-                                                  ignore_distance=ignore_distance,
-                                                  ignore_first_visit=ignore_first_visit,
-                                                  ignore_has_updated=ignore_has_updated,
-                                                  verbose=verbose,
-                                                  minNrew=minNrew)
-        perf_tmp, trial_ctr_tmp, prob_array_for_pois_binom_tmp, choices_tmp = res
+        if np.sum(rew_list)>min_rew_in_session:
+            res = model_based_analysis_single_session(state_seq,rew_list,forced_seq,
+                                                    ignore_distance=ignore_distance,
+                                                    ignore_first_visit=ignore_first_visit,
+                                                    ignore_has_updated=ignore_has_updated,
+                                                    use_block_transitions=use_block_transitions,
+                                                    verbose=verbose,
+                                                    if_is_rew_loc=if_is_rew_loc,
+                                                    minNrew=minNrew)
+            perf_tmp, trial_ctr_tmp, prob_array_for_pois_binom_tmp, choices_tmp = res
 
-        perf += perf_tmp
-        trial_ctr += trial_ctr_tmp
-        prob_array_for_pois_binom.extend(prob_array_for_pois_binom_tmp)
-        choices.extend(choices_tmp)
+            perf += perf_tmp
+            trial_ctr += trial_ctr_tmp
+            prob_array_for_pois_binom.extend(prob_array_for_pois_binom_tmp)
+            choices.extend(choices_tmp)
     return perf, trial_ctr, prob_array_for_pois_binom, choices
 
 
 def model_based_analysis_single_session(state_seq,rew_list,forced_seq,
-                                        ignore_distance=False,ignore_first_visit=False,ignore_has_updated=True,
-                                        minNrew=15,use_block_transitions=False,verbose=False,):
+                                        ignore_distance=False,ignore_first_visit=False,
+                                        ignore_has_updated=True,
+                                        minNrew=15,use_block_transitions=False,
+                                        if_is_rew_loc=False,verbose=False,):
     """ Check for model based behaviour on trials"""
 
 
@@ -174,7 +203,7 @@ def model_based_analysis_single_session(state_seq,rew_list,forced_seq,
     exp_dirs = []
     prev_block_start = 0
     block_start = 0
-
+    check1 = []
     for st,nd in zip(trial_starts,trial_ends):
 
         rew_loc = state_seq[nd]  #this is state that is rewarded
@@ -200,11 +229,13 @@ def model_based_analysis_single_session(state_seq,rew_list,forced_seq,
         for pk_ctr in range(st+1,nd):  #for each poke between two rewards  
 
             d0,d1,_ = get_st_dist(state_seq,pk_ctr,rew_loc)
-            free_choice_trial = forced_seq[pk_ctr] is False
+            free_choice_trial = forced_seq[pk_ctr]==False
             state = state_seq[pk_ctr]
             next_state = state_seq[pk_ctr+1]
-            same_as_prev_pol = policy_changed_with_rew_loc(pk_ctr,state_seq,rew_loc,prev_diff_rew_loc)
-
+            same_as_prev_pol = policy_changed_with_rew_loc(pk_ctr,state_seq,rew_loc,prev_diff_rew_loc,if_is_rew_loc=if_is_rew_loc)
+            if np.abs(state-next_state)!=1:
+                print(state,next_state,rew_list[pk_ctr])
+            #check1.append(np.abs(state-next_state))
             inclusion_condition_list = [free_choice_trial,              #NOT a forced trial
                                      prev_diff_rew_loc is not None,  #ignore first block in session
                                      not same_as_prev_pol,           #ensure that this a policy change is required to make correct decision
@@ -216,7 +247,7 @@ def model_based_analysis_single_session(state_seq,rew_list,forced_seq,
                                      state!=rew_loc,  #this is necessary due to a bug in the code
                                      ]
 
-
+            
             if all(inclusion_condition_list):
                 
                 if use_block_transitions:
@@ -242,6 +273,11 @@ def model_based_analysis_single_session(state_seq,rew_list,forced_seq,
                     prob_array_for_pois_binom.append(t_p)
                     choices.append(int(d1<d0))
 
+                #These should be largely nans except because of bug in behaviour code, you can in some sessions
+                #start in the rewarded state
+
+                #if prev_diff_rew_loc==state:
+                #    print(t_p)
                 #this is print command to make sure everything is working correctyl.
                 if verbose:
                     print(("!"*80 + "\n")*3)
@@ -258,4 +294,5 @@ def model_based_analysis_single_session(state_seq,rew_list,forced_seq,
         if direction not in exp_dirs:
             exp_dirs.append(direction)
         prev_rew_loc = rew_loc
+        assert all(np.asarray(check1)==1)
     return perf, trial_ctr, prob_array_for_pois_binom, choices
