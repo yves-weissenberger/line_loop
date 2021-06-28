@@ -1,0 +1,877 @@
+{\rtf1\ansi\ansicpg1252\cocoartf2511
+\cocoatextscaling0\cocoaplatform0{\fonttbl\f0\fmodern\fcharset0 Courier;}
+{\colortbl;\red255\green255\blue255;\red0\green0\blue0;}
+{\*\expandedcolortbl;;\cssrgb\c0\c0\c0;}
+\paperw11900\paperh16840\margl1440\margr1440\vieww10800\viewh8400\viewkind0
+\deftab720
+\pard\pardeftab720\sl280\partightenfactor0
+
+\f0\fs24 \cf2 \expnd0\expndtw0\kerning0
+\outl0\strokewidth0 \strokec2 \{\
+ "cells": [\
+  \{\
+   "cell_type": "code",\
+   "execution_count": 1,\
+   "metadata": \{\},\
+   "outputs": [],\
+   "source": [\
+    "%matplotlib inline\\n",\
+    "import numpy as np\\n",\
+    "import scipy as sp\\n",\
+    "import pandas as pd\\n",\
+    "import matplotlib.pyplot as plt\\n",\
+    "import matplotlib\\n",\
+    "import seaborn\\n",\
+    "import scipy.stats as stt\\n",\
+    "seaborn.set(font_scale=1.5,style='ticks')\\n",\
+    "import os\\n",\
+    "import re\\n",\
+    "import sys\\n",\
+    "import itertools\\n",\
+    "import functools\\n",\
+    "import networkx as nx\\n",\
+    "from datetime import date, timedelta\\n",\
+    "from datetime import datetime\\n",\
+    "from scipy.ndimage import gaussian_filter1d\\n",\
+    "\\n",\
+    "#sys.path.append(r\\"C:\\\\Users\\\\yweissenberger\\\\Documents\\\\code\\\\line_loop-master\\")\\n",\
+    "#sys.path.append(r\\"C:\\\\Users\\\\yweissenberger\\\\Documents\\\\code\\\\line_loop-master\\\\packages\\")\\n",\
+    "sys.path.append(\\"/Users/joshuakeeling/Documents/Python/Project/line_loop/packages/\\")"\
+   ]\
+  \},\
+  \{\
+   "cell_type": "code",\
+   "execution_count": 2,\
+   "metadata": \{\},\
+   "outputs": [],\
+   "source": [\
+    "import mouse_poker as mpk\\n",\
+    "from mouse_poker.navi import *"\
+   ]\
+  \},\
+  \{\
+   "cell_type": "code",\
+   "execution_count": 3,\
+   "metadata": \{\},\
+   "outputs": [],\
+   "source": [\
+    "def performance_arrays(state_seq,port_seq,rew_list,forced_seq):\\n",\
+    "    \\n",\
+    "    \\"\\"\\"\\n",\
+    "    Find the state being rewarded during each step in the session\\n",\
+    "    If the choice that is made decreases the step distance from rew\\n",\
+    "    score choice as correct (1) if not, score as incorrect (0)\\n",\
+    "    \\n",\
+    "    Creates some useful arrays: \\n",\
+    "    state_seq,rew_list,port_seq,forced_seq,rew_state,score_list,\\n",\
+    "    rew_change,rew_change_end,trial_perf,trial_rew_change_end\\n",\
+    "    \\"\\"\\"\\n",\
+    "    \\n",\
+    "    ##Need to end the used data with the final reward rather than \\n",\
+    "    #half way through a trial\\n",\
+    "    #take out forced trials\\n",\
+    "    final = np.where(rew_list)[0][-1]+1\\n",\
+    "    state_seq = state_seq[0:final]\\n",\
+    "    rew_list = rew_list[0:final]\\n",\
+    "    port_seq = port_seq[0:final]\\n",\
+    "    forced_seq = forced_seq[0:final]    \\n",\
+    "    \\n",\
+    "    ##Create array of state being rewarded during each step in the session\\n",\
+    "    rew_state = np.zeros(len(rew_list))\\n",\
+    "    prev_rew_ind = 0\\n",\
+    "    for rew_ind in np.where(rew_list)[0]:\\n",\
+    "        rew_state[prev_rew_ind:rew_ind+1]=state_seq[rew_ind]\\n",\
+    "        prev_rew_ind = rew_ind+1\\n",\
+    "\\n",\
+    "    #Whether the choice is correct:\\n",\
+    "    score_list = np.zeros(len(rew_list))\\n",\
+    "\\n",\
+    "    for state_ind in np.arange(len(state_seq)):\\n",\
+    "        if rew_list[state_ind] == True:\\n",\
+    "            score_list[state_ind] = 'Nan' #Score the reward state \\"choice\\" as Nan\\n",\
+    "        else:\\n",\
+    "            d0 = np.abs(state_seq[state_ind]-rew_state[state_ind])\\n",\
+    "            d1 = np.abs(state_seq[state_ind+1]-rew_state[state_ind+1])\\n",\
+    "            if d1 - d0 == -1:\\n",\
+    "                #correct choice gets score of 1\\n",\
+    "                score_list[state_ind]=1\\n",\
+    "            else:\\n",\
+    "                #incorrect choice gets score of 0\\n",\
+    "                score_list[state_ind]=0\\n",\
+    "    \\n",\
+    "    ##Remove forced choices from performance scores\\n",\
+    "    score_list[np.where(forced_seq)[0]]='Nan'\\n",\
+    "    \\n",\
+    "    ##Remove end of line choices from performance scores if \\"line\\"\\n",\
+    "    if mpk.load.get_metadata(lines)[5]=='line':\\n",\
+    "        ind = np.where((np.array(state_seq)==min(state_seq))|(np.array(state_seq)==max(state_seq)))[0]\\n",\
+    "        score_list[ind]='Nan'\\n",\
+    "        \\n",\
+    "    ##Arr for indices of reward changes (rew is in new loc after this index)\\n",\
+    "    rew_change = np.where(rew_state[:-1] != rew_state[1:])[0]\\n",\
+    "    #Ensure analysis of final section\\n",\
+    "    rew_change_end = np.append(rew_change, len(rew_list)-1) #could take out if final trial is not useful\\n",\
+    "    #rew_change_end = rew_change\\n",\
+    "    \\n",\
+    "    ## Arr of perf with each successive trial\\n",\
+    "    # trial_perf\\n",\
+    "    rew_ind = np.where(rew_list)[0]\\n",\
+    "    trial_perf = [] #Arr w perf on each trial scored as above\\n",\
+    "    trial_dec_count = [] #Arr w num decisions on each trial\\n",\
+    "    low1 = -1\\n",\
+    "    low2 = 0\\n",\
+    "    \\n",\
+    "    for rew_change_ind in rew_change_end:\\n",\
+    "        #Create arrays for score + number of decisions for each trial\\n",\
+    "        for trial_ind in np.where((rew_ind>low1) & (rew_ind<=rew_change_ind))[0]:\\n",\
+    "            upp = int(rew_ind[trial_ind])\\n",\
+    "            score = np.nanmean(score_list[low2:upp])\\n",\
+    "            count = np.sum(~np.isnan(score_list[low2:upp]))\\n",\
+    "            low2 = int(rew_ind[trial_ind])\\n",\
+    "            trial_perf.append(score)\\n",\
+    "            trial_dec_count.append(count)\\n",\
+    "        low1 = rew_change_ind\\n",\
+    "\\n",\
+    "        \\n",\
+    "    ##Create arr for trial# where rew change\\n",\
+    "    # trial_rew_change_end\\n",\
+    "    trial_rew_change_end = np.zeros(len(rew_change_end))\\n",\
+    "    for rew_change_step in np.arange(len(rew_change_end)):\\n",\
+    "        y = np.where(np.where(rew_list)[0]==rew_change_end[rew_change_step])[0]\\n",\
+    "        trial_rew_change_end[rew_change_step] = y\\n",\
+    "\\n",\
+    "    return state_seq,rew_list,port_seq,forced_seq,rew_state,score_list,\\\\\\n",\
+    "    rew_change,rew_change_end,trial_perf,trial_rew_change_end,trial_dec_count\\n",\
+    "\\n",\
+    "\\n",\
+    "def get_poke_to_state_map(lines):\\n",\
+    "    \\"\\"\\" \\"\\"\\"\\n",\
+    "    tmp = []\\n",\
+    "    for i,j in zip([int(re.findall('POKEDPORT_([0-9])',i)[0]) for i in lines if '_POKEDPORT' in i],\\n",\
+    "                         [int(re.findall('POKEDSTATE_([0-9])',i)[0]) for i in lines if '_POKEDSTATE' in i]):\\n",\
+    "\\n",\
+    "        if [i,j] not in tmp:\\n",\
+    "            tmp.append([i,j])\\n",\
+    "    poke_to_state_map = [i[1] for i in sorted(tmp)]\\n",\
+    "    return poke_to_state_map"\
+   ]\
+  \},\
+  \{\
+   "cell_type": "code",\
+   "execution_count": 31,\
+   "metadata": \{\},\
+   "outputs": [\
+    \{\
+     "name": "stdout",\
+     "output_type": "stream",\
+     "text": [\
+      "line 70 '460175_10'-2021-03-03-105405.txt\\n",\
+      "line 58 '460175_10'-2021-03-15-145534.txt\\n"\
+     ]\
+    \},\
+    \{\
+     "name": "stderr",\
+     "output_type": "stream",\
+     "text": [\
+      "<ipython-input-3-534affd301d9>:71: RuntimeWarning: Mean of empty slice\\n",\
+      "  score = np.nanmean(score_list[low2:upp])\\n"\
+     ]\
+    \},\
+    \{\
+     "name": "stdout",\
+     "output_type": "stream",\
+     "text": [\
+      "line 50 '456675_10'-2021-02-17-110616.txt\\n",\
+      "line 76 '460175_10'-2021-03-01-110337.txt\\n",\
+      "line 77 '460175_10'-2021-03-02-142443.txt\\n",\
+      "line 61 '456675_10'-2021-03-01-110337.txt\\n",\
+      "line 54 '460175_10'-2021-02-17-110616.txt\\n",\
+      "line 59 '456675_10'-2021-03-03-105405.txt\\n",\
+      "line 64 '456675_10'-2021-03-15-145534.txt\\n",\
+      "line 58 '456675_10'-2021-02-23-142909.txt\\n",\
+      "line 61 '460175_10'-2021-02-26-104431.txt\\n",\
+      "line 49 '460175_10'-2021-02-22-112628.txt\\n",\
+      "line 62 '460175_10'-2021-03-05-120412.txt\\n",\
+      "line 61 '456675_10'-2021-03-05-120412.txt\\n",\
+      "line 49 '456675_10'-2021-02-22-112628.txt\\n",\
+      "line 64 '456675_10'-2021-02-26-104431.txt\\n",\
+      "line 56 '460175_10'-2021-02-23-142909.txt\\n",\
+      "line 53 '460175_10'-2021-03-15-143847.txt\\n",\
+      "line 56 '460175_10'-2021-03-01-141104.txt\\n",\
+      "'460175_10'-2021-03-02-132053.txt\\n",\
+      "line 64 '460175_10'-2021-03-05-125238.txt\\n",\
+      "line 69 '456675_10'-2021-03-03-154343.txt\\n",\
+      "line 55 '460175_10'-2021-02-25-141237.txt\\n",\
+      "line 70 '456675_10'-2021-03-02-103316.txt\\n",\
+      "line 55 '456675_10'-2021-02-25-141237.txt\\n",\
+      "line 58 '460175_10'-2021-03-02-103316.txt\\n",\
+      "line 62 '460175_10'-2021-03-03-154343.txt\\n",\
+      "line 63 '456675_10'-2021-03-05-125238.txt\\n",\
+      "'456675_10'-2021-03-02-132053.txt\\n",\
+      "line 58 '456675_10'-2021-03-15-143847.txt\\n",\
+      "line 68 '456675_10'-2021-03-01-141104.txt\\n",\
+      "line 59 '456675_10'-2021-02-26-152252.txt\\n",\
+      "line 61 '460175_10'-2021-03-04-105905.txt\\n",\
+      "line 64 '456675_10'-2021-02-26-160130.txt\\n",\
+      "line 56 '460175_10'-2021-02-24-104759.txt\\n",\
+      "line 64 '460175_10'-2021-02-25-110423.txt\\n",\
+      "line 63 '456675_10'-2021-02-19-120513.txt\\n",\
+      "line 62 '456675_10'-2021-02-23-102809.txt\\n",\
+      "line 60 '456675_10'-2021-02-25-110423.txt\\n",\
+      "line 53 '460175_10'-2021-02-23-102809.txt\\n",\
+      "line 49 '460175_10'-2021-02-19-120513.txt\\n",\
+      "line 73 '456675_10'-2021-03-04-105905.txt\\n",\
+      "line 67 '460175_10'-2021-02-26-160130.txt\\n",\
+      "line 52 '456675_10'-2021-02-24-104759.txt\\n"\
+     ]\
+    \}\
+   ],\
+   "source": [\
+    "##BATCH ANALYSIS:\\n",\
+    "\\n",\
+    "ROOT = '/Users/joshuakeeling/Documents/Python/Project/beh_data_newroom/line_loop_batch_3NAVI/'\\n",\
+    "#ROOT = '/Users/joshuakeeling/Documents/Python/Project/beh_data_newroom/line_loop_batch_4_RUNNAVI/'\\n",\
+    "#ROOT = '/Users/joshuakeeling/Documents/Python/Project/beh_data_newroom/'\\n",\
+    "\\n",\
+    "res_dict = \{\}\\n",\
+    "minNrew = 20\\n",\
+    "today = datetime.now()\\n",\
+    "\\n",\
+    "files = []\\n",\
+    "DF = pd.DataFrame()\\n",\
+    "\\n",\
+    "for filename in os.listdir(ROOT):\\n",\
+    "    if filename.endswith(\\".txt\\"): \\n",\
+    "        files.append(filename)\\n",\
+    "    else:\\n",\
+    "        continue\\n",\
+    "\\n",\
+    "for file in files:\\n",\
+    "    try:\\n",\
+    "        \\n",\
+    "        fpath = os.path.join(ROOT, file)\\n",\
+    "        f = open(fpath, 'r')\\n",\
+    "        lines = f.readlines()\\n",\
+    "\\n",\
+    "        #Get metadata:\\n",\
+    "        experiment_name, task_name, subject_id, task_nr, graph,lineloop,date,\\\\\\n",\
+    "            test,overview = mpk.load.get_metadata(lines)\\n",\
+    "\\n",\
+    "\\n",\
+    "        if overview['n_rewards'] > minNrew:\\n",\
+    "\\n",\
+    "            state_seq,rew_list,port_seq,forced_seq = extract_navi_dat(lines)\\n",\
+    "\\n",\
+    "            state_seq,rew_list,port_seq,forced_seq,rew_state,score_list,\\\\\\n",\
+    "                rew_change,rew_change_end,trial_perf,trial_rew_change_end,trial_dec_count\\\\\\n",\
+    "                = performance_arrays(state_seq,port_seq,rew_list,forced_seq)\\n",\
+    "\\n",\
+    "            poke_state_map = get_poke_to_state_map(lines)\\n",\
+    "\\n",\
+    "            file_dict = \{'subject_id':subject_id,'date_time':pd.to_datetime(date),\\\\\\n",\
+    "                    'state_seq':state_seq,'rew_list':rew_list,'port_seq':port_seq,\\\\\\n",\
+    "                    'forced_seq':forced_seq,'rew_state':rew_state,'score_list':score_list,\\\\\\n",\
+    "                    'rew_change':rew_change,'rew_change_end':rew_change_end,\\\\\\n",\
+    "                    'trial_perf':trial_perf,'trial_rew_change_end':trial_rew_change_end,\\\\\\n",\
+    "                    'poke_state_map':poke_state_map,'trial_dec_count':trial_dec_count\}\\n",\
+    "\\n",\
+    "            DF = DF.append(file_dict, ignore_index = True)\\n",\
+    "\\n",\
+    "            mean_perf = np.nanmean(score_list)\\n",\
+    "\\n",\
+    "            print(mpk.load.get_metadata(lines)[5], int(100*mean_perf), file)\\n",\
+    "    except:\\n",\
+    "        print(file)"\
+   ]\
+  \},\
+  \{\
+   "cell_type": "code",\
+   "execution_count": 32,\
+   "metadata": \{\},\
+   "outputs": [\
+    \{\
+     "ename": "IndexError",\
+     "evalue": "index 6 is out of bounds for axis 2 with size 6",\
+     "output_type": "error",\
+     "traceback": [\
+      "\\u001b[0;31m---------------------------------------------------------------------------\\u001b[0m",\
+      "\\u001b[0;31mIndexError\\u001b[0m                                Traceback (most recent call last)",\
+      "\\u001b[0;32m<ipython-input-32-d4c5cb7bd29e>\\u001b[0m in \\u001b[0;36m<module>\\u001b[0;34m\\u001b[0m\\n\\u001b[1;32m     23\\u001b[0m             \\u001b[0mcount\\u001b[0m \\u001b[0;34m=\\u001b[0m \\u001b[0msum\\u001b[0m\\u001b[0;34m(\\u001b[0m\\u001b[0;34m~\\u001b[0m\\u001b[0mnp\\u001b[0m\\u001b[0;34m.\\u001b[0m\\u001b[0misnan\\u001b[0m\\u001b[0;34m(\\u001b[0m\\u001b[0mSCORE\\u001b[0m\\u001b[0;34m[\\u001b[0m\\u001b[0mnp\\u001b[0m\\u001b[0;34m.\\u001b[0m\\u001b[0mwhere\\u001b[0m\\u001b[0;34m(\\u001b[0m\\u001b[0;34m(\\u001b[0m\\u001b[0mnp\\u001b[0m\\u001b[0;34m.\\u001b[0m\\u001b[0marray\\u001b[0m\\u001b[0;34m(\\u001b[0m\\u001b[0mSTATE\\u001b[0m\\u001b[0;34m)\\u001b[0m\\u001b[0;34m==\\u001b[0m\\u001b[0mcol\\u001b[0m\\u001b[0;34m)\\u001b[0m\\u001b[0;34m&\\u001b[0m\\u001b[0;34m(\\u001b[0m\\u001b[0mnp\\u001b[0m\\u001b[0;34m.\\u001b[0m\\u001b[0marray\\u001b[0m\\u001b[0;34m(\\u001b[0m\\u001b[0mREW_LOC\\u001b[0m\\u001b[0;34m)\\u001b[0m\\u001b[0;34m==\\u001b[0m\\u001b[0mrew_loc\\u001b[0m\\u001b[0;34m)\\u001b[0m\\u001b[0;34m)\\u001b[0m\\u001b[0;34m[\\u001b[0m\\u001b[0;36m0\\u001b[0m\\u001b[0;34m]\\u001b[0m\\u001b[0;34m]\\u001b[0m\\u001b[0;34m)\\u001b[0m\\u001b[0;34m)\\u001b[0m\\u001b[0;34m\\u001b[0m\\u001b[0;34m\\u001b[0m\\u001b[0m\\n\\u001b[1;32m     24\\u001b[0m             \\u001b[0mrow\\u001b[0m \\u001b[0;34m=\\u001b[0m \\u001b[0mnp\\u001b[0m\\u001b[0;34m.\\u001b[0m\\u001b[0mwhere\\u001b[0m\\u001b[0;34m(\\u001b[0m\\u001b[0mrew_locs\\u001b[0m\\u001b[0;34m==\\u001b[0m\\u001b[0mrew_loc\\u001b[0m\\u001b[0;34m)\\u001b[0m\\u001b[0;34m[\\u001b[0m\\u001b[0;36m0\\u001b[0m\\u001b[0;34m]\\u001b[0m\\u001b[0;34m\\u001b[0m\\u001b[0;34m\\u001b[0m\\u001b[0m\\n\\u001b[0;32m---> 25\\u001b[0;31m             \\u001b[0mscore_matrix\\u001b[0m\\u001b[0;34m[\\u001b[0m\\u001b[0msess\\u001b[0m\\u001b[0;34m,\\u001b[0m\\u001b[0mrow\\u001b[0m\\u001b[0;34m,\\u001b[0m\\u001b[0mcol\\u001b[0m\\u001b[0;34m]\\u001b[0m \\u001b[0;34m=\\u001b[0m \\u001b[0mscore_sum\\u001b[0m\\u001b[0;34m\\u001b[0m\\u001b[0;34m\\u001b[0m\\u001b[0m\\n\\u001b[0m\\u001b[1;32m     26\\u001b[0m             \\u001b[0mcount_matrix\\u001b[0m\\u001b[0;34m[\\u001b[0m\\u001b[0msess\\u001b[0m\\u001b[0;34m,\\u001b[0m\\u001b[0mrow\\u001b[0m\\u001b[0;34m,\\u001b[0m\\u001b[0mcol\\u001b[0m\\u001b[0;34m]\\u001b[0m \\u001b[0;34m=\\u001b[0m \\u001b[0mcount\\u001b[0m\\u001b[0;34m\\u001b[0m\\u001b[0;34m\\u001b[0m\\u001b[0m\\n\\u001b[1;32m     27\\u001b[0m \\u001b[0;34m\\u001b[0m\\u001b[0m\\n",\
+      "\\u001b[0;31mIndexError\\u001b[0m: index 6 is out of bounds for axis 2 with size 6"\
+     ]\
+    \}\
+   ],\
+   "source": [\
+    "##Performance in each state for a given reward location\\n",\
+    "\\n",\
+    "min_state = np.min(DF['state_seq'][0]) #uses values from the first session for all sessions\\n",\
+    "max_state = np.max(DF['state_seq'][0]) #uses values from the first session for all sessions\\n",\
+    "rew_locs = (np.unique(DF['rew_state'][0])).astype(int) #uses values from the first session for all sessions \\n",\
+    "\\n",\
+    "Ncols = len(np.arange(min_state,max_state+1,1))\\n",\
+    "Nrows = len(np.unique(rew_locs))\\n",\
+    "Nsess = len(np.arange(np.shape(DF)[0]))\\n",\
+    "\\n",\
+    "score_matrix = np.zeros((Nsess,Nrows,Ncols))\\n",\
+    "count_matrix = np.zeros((Nsess,Nrows,Ncols))\\n",\
+    "\\n",\
+    "for sess in np.arange(np.shape(DF)[0]):\\n",\
+    "    STATE = DF['state_seq'][sess]\\n",\
+    "    SCORE = DF['score_list'][sess]\\n",\
+    "    REW_LOC = (DF['rew_state'][sess]).astype(int)\\n",\
+    "    \\n",\
+    "    for col in np.arange(min_state,max_state+1,1):\\n",\
+    "        for rew_loc in rew_locs:\\n",\
+    "            \\n",\
+    "            score_sum = np.nansum(((SCORE[np.where((np.array(STATE)==col)&(np.array(REW_LOC)==rew_loc))[0]])))\\n",\
+    "            count = sum(~np.isnan(SCORE[np.where((np.array(STATE)==col)&(np.array(REW_LOC)==rew_loc))[0]]))\\n",\
+    "            row = np.where(rew_locs==rew_loc)[0]\\n",\
+    "            score_matrix[sess,row,col] = score_sum\\n",\
+    "            count_matrix[sess,row,col] = count\\n",\
+    "            \\n",\
+    "score_matrix = np.sum(score_matrix, axis = 0)/np.sum(count_matrix, axis = 0)"\
+   ]\
+  \},\
+  \{\
+   "cell_type": "markdown",\
+   "metadata": \{\},\
+   "source": [\
+    "#Need to work out logic gate for trial selection\\n",\
+    "#IF N is the trial with a new reward location (rew location is discovered this trial)\\n",\
+    "#need to look at N + 1 and see if the mouse goes towards the old rew location or the new one\\n",\
+    "#can only test this when on trial N+1 the mouse is started between the old and new rew location in state space\\n",\
+    "\\n",\
+    "#need trial where rew change loc"\
+   ]\
+  \},\
+  \{\
+   "cell_type": "code",\
+   "execution_count": 33,\
+   "metadata": \{\},\
+   "outputs": [],\
+   "source": [\
+    "#Trial rew change gives the trial before reward is moved\\n",\
+    "#we want the decision after the trial after rew changes so we want the decision after trial +1 \\n",\
+    "score_df = pd.DataFrame()\\n",\
+    "for index in DF.index:\\n",\
+    "    score_arr = []\\n",\
+    "    for num, rew_change in enumerate(DF['trial_rew_change_end'][index][0:-1]): #dont use \\"end\\"\\n",\
+    "        change_I = np.where(DF['rew_list'][index])[0][int(rew_change)]\\n",\
+    "        plus1_I = np.where(DF['rew_list'][index])[0][int(rew_change)+1]\\n",\
+    "\\n",\
+    "\\n",\
+    "        #make logic gate for which trials are used!\\n",\
+    "        state = DF['state_seq'][index][plus1_I+1]\\n",\
+    "        old_rew = DF['rew_state'][index][change_I]\\n",\
+    "        new_rew = DF['rew_state'][index][plus1_I+1]\\n",\
+    "\\n",\
+    "        if (old_rew > state > new_rew) or (old_rew < state < new_rew):\\n",\
+    "            score_val = DF['score_list'][index][plus1_I+1]\\n",\
+    "            score_arr.append(score_val)\\n",\
+    "            #print(score_val)\\n",\
+    "        else:\\n",\
+    "            continue\\n",\
+    "        #This gives the index of the reward when the end in terms of \\n",\
+    "        #Do they go towards reward?\\n",\
+    "    \\n",\
+    "    score_df = score_df.append(score_arr)"\
+   ]\
+  \},\
+  \{\
+   "cell_type": "code",\
+   "execution_count": 37,\
+   "metadata": \{\
+    "scrolled": true\
+   \},\
+   "outputs": [\
+    \{\
+     "name": "stdout",\
+     "output_type": "stream",\
+     "text": [\
+      "ID: 460175_10 2021-02-17 11:06:16 \\n",\
+      " 6 202 196 8.0 5.0 1.0 \\n",\
+      " [3, 4, 3, 4, 5, 7, 6, 5, 3, 4, 5, 7, 6, 5, 7, 6, 5, 3, 4, 5, 8, 7, 8, 7, 8] \\n",\
+      "---------------------------\\n",\
+      "\\n",\
+      "ID: 456675_10 2021-03-15 14:55:34 \\n",\
+      " 8 1556 1547 8.0 6.0 1.0 \\n",\
+      " [4, 3, 4, 5, 6, 7, 6, 4, 3, 4, 3, 4, 5, 6, 7, 6, 5, 6, 8, 7, 8, 7, 8, 7, 8] \\n",\
+      "---------------------------\\n",\
+      "\\n",\
+      "ID: 456675_10 2021-03-05 12:04:12 \\n",\
+      " 13 391 388 5.0 3.0 1.0 \\n",\
+      " [5, 4, 5, 2, 3, 4, 3, 4, 3, 5, 4, 3, 5, 4, 3, 6, 5, 4, 3, 2, 3, 2, 3, 2, 3] \\n",\
+      "---------------------------\\n",\
+      "\\n",\
+      "ID: 456675_10 2021-02-26 10:44:31 \\n",\
+      " 15 1140 1132 1.0 4.0 1.0 \\n",\
+      " [6, 5, 6, 5, 4, 2, 3, 4, 6, 5, 6, 5, 4, 6, 5, 6, 5, 4, 6, 5, 4, 1, 2, 3, 4] \\n",\
+      "---------------------------\\n",\
+      "\\n",\
+      "ID: 456675_10 2021-03-05 12:52:38 \\n",\
+      " 26 374 370 5.0 3.0 0.0 \\n",\
+      " [4, 5, 1, 2, 3, 4, 5, 6, 5, 6, 5, 6, 5, 6, 5, 4, 5, 6, 5, 6, 5, 4, 3, 5, 4] \\n",\
+      "---------------------------\\n",\
+      "\\n",\
+      "ID: 456675_10 2021-03-01 14:11:04 \\n",\
+      " 28 2432 2425 6.0 3.0 1.0 \\n",\
+      " [2, 3, 1, 2, 3, 5, 4, 3, 6, 5, 4, 3, 1, 2, 3, 1, 2, 3, 1, 2, 3, 6, 5, 6, 5] \\n",\
+      "---------------------------\\n",\
+      "\\n",\
+      "ID: 456675_10 2021-03-04 10:59:05 \\n",\
+      " 39 1146 1142 6.0 3.0 1.0 \\n",\
+      " [5, 6, 1, 2, 3, 5, 4, 3, 1, 2, 3, 1, 2, 3, 6, 5, 4, 3, 5, 4, 3, 1, 2, 3, 1] \\n",\
+      "---------------------------\\n",\
+      "\\n"\
+     ]\
+    \}\
+   ],\
+   "source": [\
+    "##THE ONE with various parameters\\n",\
+    "#Parameters\\n",\
+    "allow_move_into_middle = False\\n",\
+    "full_trial = False #True -> score for each decision on a trial, false -> first decision\\n",\
+    "first_visit = False #True + full_trial True -> give score of first decision in each state on a trial\\n",\
+    "next_to_reward = False #True + full_trial True + first_visit False ->only look at decisions next to reward\\n",\
+    "not_next_to_reward = False #True + full_trial True + first_visit False + next_to_reward False -> only look at \\n",\
+    "                            #decisions not next to reward\\n",\
+    "\\n",\
+    "score_df = pd.DataFrame()\\n",\
+    "\\n",\
+    "for index in DF.index: #for all sessions\\n",\
+    "    score_arr = []\\n",\
+    "    \\n",\
+    "    for num, rew_change in enumerate(DF['trial_rew_change_end'][index][0:-1]): #-1 to not use \\"end\\"\\n",\
+    "    \\n",\
+    "        #set the number of rewards possible to the number of rew in each section -1 \\n",\
+    "        permissible_num_rewards = int(DF['trial_rew_change_end'][index][num+1]-DF['trial_rew_change_end'][index][num])-1\\n",\
+    "\\n",\
+    "        change_I = np.where(DF['rew_list'][index])[0][int(rew_change)] #index of change in rew\\n",\
+    "        old_rew = DF['rew_state'][index][change_I]                     #old rew state\\n",\
+    "        \\n",\
+    "        prev_states = []                                               #states visited since rew_change\\n",\
+    "\\n",\
+    "        for num_rews in np.arange(permissible_num_rewards)+1:\\n",\
+    "            plus_num_rew_I = np.where(DF['rew_list'][index])[0][int(rew_change)+(num_rews)]+1\\n",\
+    "            plus_num_rew2_I = np.where(DF['rew_list'][index])[0][int(rew_change)+(num_rews+1)]\\n",\
+    "            \\n",\
+    "            state = DF['state_seq'][index][plus_num_rew_I]\\n",\
+    "            new_rew = DF['rew_state'][index][plus_num_rew_I]\\n",\
+    "            \\n",\
+    "            prev_states = DF['state_seq'][index][change_I+1:plus_num_rew_I] #gives only 2\\n",\
+    "            \\n",\
+    "            if allow_move_into_middle == True:\\n",\
+    "                for num_steps, states in enumerate(DF['state_seq'][index][plus_num_rew_I:plus_num_rew2_I]):\\n",\
+    "                    if ((old_rew > states > new_rew) or (old_rew < states < new_rew)) & (states not in prev_states):\\n",\
+    "                        score_val = DF['score_list'][index][plus_num_rew_I+num_steps]\\n",\
+    "                        score_arr.append(score_val)\\n",\
+    "                        print(\\n",\
+    "                            'ID:', DF['subject_id'][index], DF['date_time'][index],\\n",\
+    "                            '\\\\n', index, plus_num_rew_I,change_I, old_rew, new_rew, score_val,num_steps,\\n",\
+    "                            '\\\\n', DF['state_seq'][index][plus_num_rew_I-5:plus_num_rew_I+20],\\n",\
+    "                            '\\\\n---------------------------\\\\n')\\n",\
+    "                        break\\n",\
+    "                        \\n",\
+    "            elif ((old_rew > state > new_rew) or (old_rew < state < new_rew)) & (state not in prev_states):\\n",\
+    "                if full_trial == True:\\n",\
+    "                    trial_state_prevs = []\\n",\
+    "                    if first_visit == True:\\n",\
+    "                        score_val = []\\n",\
+    "                        for num_steps, states in enumerate(DF['state_seq'][index][plus_num_rew_I:plus_num_rew2_I]):                        \\n",\
+    "                            if states not in trial_state_prevs:\\n",\
+    "                                trial_state_prevs.append(states)\\n",\
+    "                                score_val.append(DF['score_list'][index][plus_num_rew_I+num_steps])\\n",\
+    "                            else:\\n",\
+    "                                continue\\n",\
+    "                                \\n",\
+    "                    elif next_to_reward == True:\\n",\
+    "                        arr = np.asarray(DF['state_seq'][index][plus_num_rew_I:plus_num_rew2_I])\\n",\
+    "                        next_to = np.where((arr==new_rew+1)|(arr==new_rew-1))[0]\\n",\
+    "                        score_val = np.asarray(DF['score_list'][index][plus_num_rew_I:plus_num_rew2_I])[next_to]\\n",\
+    "                    \\n",\
+    "                    elif not_next_to_reward == True:\\n",\
+    "                        arr = np.asarray(DF['state_seq'][index][plus_num_rew_I:plus_num_rew2_I])\\n",\
+    "                        not_next_to = np.where((arr!=new_rew+1)&(arr!=new_rew-1))[0]\\n",\
+    "                        score_val = np.asarray(DF['score_list'][index][plus_num_rew_I:plus_num_rew2_I])[not_next_to]\\n",\
+    "                    \\n",\
+    "                    else: #all decisions on a trial\\n",\
+    "                        score_val = DF['score_list'][index][plus_num_rew_I:plus_num_rew2_I+1] #Check indexing\\n",\
+    "                \\n",\
+    "                else: #standard conditions\\n",\
+    "                    score_val = DF['score_list'][index][plus_num_rew_I]\\n",\
+    "                \\n",\
+    "                score_arr.append(score_val)\\n",\
+    "                print(\\n",\
+    "                    'ID:', DF['subject_id'][index], DF['date_time'][index],\\n",\
+    "                    '\\\\n', index, plus_num_rew_I,change_I, old_rew, new_rew, score_val,\\n",\
+    "                    '\\\\n', DF['state_seq'][index][plus_num_rew_I-5:plus_num_rew_I+20],\\n",\
+    "                    '\\\\n---------------------------\\\\n')\\n",\
+    "            \\n",\
+    "    score_df = score_df.append(score_arr)"\
+   ]\
+  \},\
+  \{\
+   "cell_type": "code",\
+   "execution_count": null,\
+   "metadata": \{\},\
+   "outputs": [],\
+   "source": [\
+    "forced = '/Users/joshuakeeling/Documents/Python/Project/line_loop/project_notebooks/line_loop/navi/test_forced_seq.npy'\\n",\
+    "state = '/Users/joshuakeeling/Documents/Python/Project/line_loop/project_notebooks/line_loop/navi/test_state_seq.npy'\\n",\
+    "rew = '/Users/joshuakeeling/Documents/Python/Project/line_loop/project_notebooks/line_loop/navi/test_rew_list.npy'\\n",\
+    "port_seq =  '/Users/joshuakeeling/Documents/Python/Project/line_loop/project_notebooks/line_loop/navi/test_state_seq.npy'\\n",\
+    "\\n",\
+    "\\n",\
+    "\\n",\
+    "\\n",\
+    "\\n",\
+    "forced_seq = np.load(forced)\\n",\
+    "state_seq = np.load(state)\\n",\
+    "rew_list = np.load(rew)\\n",\
+    "\\n",\
+    "state_seq,rew_list,port_seq,forced_seq,rew_state,score_list,\\\\\\n",\
+    "            rew_change,rew_change_end,trial_perf,trial_rew_change_end,trial_dec_count\\\\\\n",\
+    "            = performance_arrays(state_seq,port_seq,rew_list,forced_seq)\\n",\
+    "\\n"\
+   ]\
+  \},\
+  \{\
+   "cell_type": "code",\
+   "execution_count": null,\
+   "metadata": \{\},\
+   "outputs": [],\
+   "source": [\
+    "# #Test case 1\\n",\
+    "state_seq = [0,1,2,8,7,6,5,3,4,5]\\n",\
+    "port_seq = [0,1,2,8,7,6,5,3,4,5]\\n",\
+    "rew_list = np.array([0,0,1,0,0,0,1,0,0,1])==1\\n",\
+    "forced_seq = np.array([1,0,0,1,0,0,0,0,0,0])==1\\n",\
+    "\\n",\
+    "\\n",\
+    "\\n",\
+    "state_seq,rew_list,port_seq,forced_seq,rew_state,score_list,\\\\\\n",\
+    "            rew_change,rew_change_end,trial_perf,trial_rew_change_end,trial_dec_count\\\\\\n",\
+    "            = performance_arrays(state_seq,port_seq,rew_list,forced_seq)\\n"\
+   ]\
+  \},\
+  \{\
+   "cell_type": "code",\
+   "execution_count": null,\
+   "metadata": \{\},\
+   "outputs": [],\
+   "source": [\
+    "#Plot of performance with given reward locations\\n",\
+    "\\n",\
+    "plt.imshow(score_matrix,vmin=0,vmax=1,cmap='RdBu_r')\\n",\
+    "plt.xlabel(\\"Current State\\")\\n",\
+    "plt.ylabel(\\"Rew Location \\\\n (1,3,5,7)\\")\\n",\
+    "cbar = plt.colorbar()\\n",\
+    "cbar.set_label(\\"Fraction correct\\")"\
+   ]\
+  \},\
+  \{\
+   "cell_type": "code",\
+   "execution_count": null,\
+   "metadata": \{\},\
+   "outputs": [],\
+   "source": [\
+    "#Performance across sessions \\n",\
+    "\\n",\
+    "min_state = np.min(DF['state_seq'][0])\\n",\
+    "max_state = np.max(DF['state_seq'][0])\\n",\
+    "\\n",\
+    "\\n",\
+    "Ncols = len(np.arange(min_state,max_state+1,1))\\n",\
+    "Nrows = np.shape(DF)[0]\\n",\
+    "empty = np.zeros((Nrows,Ncols))\\n",\
+    "\\n",\
+    "for row in np.arange(np.shape(DF)[0]):\\n",\
+    "    \\n",\
+    "    STATE = DF['state_seq'][row]\\n",\
+    "    SCORE = DF['score_list'][row]\\n",\
+    "    \\n",\
+    "    for col in np.arange(np.min(STATE),np.max(STATE)+1,1):\\n",\
+    "        y = np.nanmean(SCORE[np.where(np.array(STATE)==col)[0]])\\n",\
+    "        empty[row,col] = y\\n"\
+   ]\
+  \},\
+  \{\
+   "cell_type": "code",\
+   "execution_count": null,\
+   "metadata": \{\},\
+   "outputs": [],\
+   "source": [\
+    "#Plot of performance across sessions \\n",\
+    "\\n",\
+    "plt.imshow(empty,vmin=0,vmax=1,cmap='RdBu_r')\\n",\
+    "plt.xlabel(\\"Current State\\")\\n",\
+    "plt.ylabel(\\"Session\\")\\n",\
+    "cbar = plt.colorbar()\\n",\
+    "cbar.set_label(\\"Fraction correct\\")"\
+   ]\
+  \},\
+  \{\
+   "cell_type": "code",\
+   "execution_count": null,\
+   "metadata": \{\},\
+   "outputs": [],\
+   "source": [\
+    "##SINGLE FILE ANALYSIS\\n",\
+    "\\n",\
+    "#This one for 3:\\n",\
+    "root = '/Users/joshuakeeling/Documents/Python/Project/beh_data_newroom/line_loop_batch_3NAVI/'\\n",\
+    "#file = \\"'456675_10'-2021-02-23-102809.txt\\"\\n",\
+    "#file = \\"'456675_10'-2021-03-04-105905.txt\\"\\n",\
+    "file = \\"'460175_10'-2021-03-02-142443.txt\\"\\n",\
+    "#file = \\"'460175_10'-2021-03-02-132053.txt\\"\\n",\
+    "\\n",\
+    "# #This one for 4:\\n",\
+    "# root = '/Users/joshuakeeling/Documents/Python/Project/beh_data_newroom/line_loop_batch_4_RUNNAVI/'\\n",\
+    "# #file = \\"'456675_3'-2021-02-12-121633.txt\\"\\n",\
+    "# file = \\"'456675_3'-2021-03-02-103339.txt\\"\\n",\
+    "\\n",\
+    "fpath = os.path.join(root,file)\\n",\
+    "f = open(fpath)\\n",\
+    "lines = f.readlines()\\n",\
+    "\\n",\
+    "#Get metadata:\\n",\
+    "experiment_name, task_name, subject_id, task_nr, graph,lineloop,date,\\\\\\n",\
+    "    test,overview = mpk.load.get_metadata(lines)\\n",\
+    "\\n",\
+    "state_seq,rew_list,port_seq,forced_seq = extract_navi_dat(lines)\\n",\
+    "\\n",\
+    "overview\\n",\
+    "\\n",\
+    "state_seq,rew_list,port_seq,forced_seq,rew_state,score_list,\\\\\\n",\
+    "rew_change,rew_change_end,trial_perf,trial_rew_change_end, trial_dec_count \\\\\\n",\
+    "= performance_arrays(state_seq,port_seq,rew_list,forced_seq)"\
+   ]\
+  \},\
+  \{\
+   "cell_type": "code",\
+   "execution_count": null,\
+   "metadata": \{\
+    "scrolled": true\
+   \},\
+   "outputs": [],\
+   "source": [\
+    "new_DF = DF.sort_values('date_time')\\n",\
+    "\\n",\
+    "#Plot of proportion correct decisions on cumulative trials for subsequent sessions\\n",\
+    "\\n",\
+    "for i in new_DF['trial_perf']:\\n",\
+    "    \\n",\
+    "    plt.scatter(np.arange(len(i)),i,color='k',s=50,edgecolors='none')\\n",\
+    "    plt.xlabel(\\"trial #\\")\\n",\
+    "    plt.ylabel(\\"Proportion\\\\n correct\\")\\n",\
+    "    plt.ylim(.1,1.1)\\n",\
+    "    seaborn.despine()\\n",\
+    "    print(np.nanmean(i))\\n",\
+    "    plt.show()"\
+   ]\
+  \},\
+  \{\
+   "cell_type": "code",\
+   "execution_count": null,\
+   "metadata": \{\},\
+   "outputs": [],\
+   "source": [\
+    "for index in DF.index:\\n",\
+    "\\n",\
+    "    z = 0\\n",\
+    "\\n",\
+    "    print(\\"Mean perf in each rew location\\")\\n",\
+    "    for i in DF.rew_change_end[index]:\\n",\
+    "        y = np.nanmean(DF.score_list[index][z:i-1])\\n",\
+    "        z = i-1\\n",\
+    "        print(DF.rew_state[index][i-1], int(y*100))\\n",\
+    "\\n",\
+    "    print(\\"\\\\nDoes perf imprv with succ trials with rew at same loc??\\")\\n",\
+    "    NM = 10 #arbitrary number of sections to take mean of\\n",\
+    "    low = 0\\n",\
+    "    arr = np.linspace(rew_change[0],rew_change_end[1],num=NM)\\n",\
+    "\\n",\
+    "    for i in np.arange(NM):\\n",\
+    "        upp = arr[i]\\n",\
+    "        y = np.nanmean(DF.score_list[index][int(low):int(upp)])\\n",\
+    "        low = arr[i]\\n",\
+    "        print(int(y*100))"\
+   ]\
+  \},\
+  \{\
+   "cell_type": "code",\
+   "execution_count": null,\
+   "metadata": \{\},\
+   "outputs": [],\
+   "source": [\
+    "print(\\"Plot perf in first set of rewards\\")\\n",\
+    "x = range(int(DF.trial_rew_change_end[index][0]-1))\\n",\
+    "y = DF.trial_perf[index][0:int(DF.trial_rew_change_end[index][0])-1]\\n",\
+    "\\n",\
+    "plt.scatter(x, y,color='k',s=128,edgecolors='none')\\n",\
+    "plt.xlabel(\\"# of successive rewards at some location\\")\\n",\
+    "plt.ylabel(\\"Proportion\\\\n correct\\")\\n",\
+    "plt.ylim(.1,1.1)\\n",\
+    "seaborn.despine()"\
+   ]\
+  \},\
+  \{\
+   "cell_type": "code",\
+   "execution_count": null,\
+   "metadata": \{\},\
+   "outputs": [],\
+   "source": [\
+    "print(\\"Plot perf for successive trials at a reward location\\")\\n",\
+    "low = 1\\n",\
+    "y_dat = pd.DataFrame()\\n",\
+    "\\n",\
+    "for index in DF.index:\\n",\
+    "    y_DAT = []\\n",\
+    "    for i in np.arange(len(DF.trial_rew_change_end[index])):\\n",\
+    "        upp = int(DF.trial_rew_change_end[index][i])\\n",\
+    "        x = np.arange(upp-low)\\n",\
+    "        y = DF.trial_perf[index][low:upp]\\n",\
+    "        low = upp + 1\\n",\
+    "        y_DAT.append(y)\\n",\
+    "        plt.scatter(x, y,color='k',s=10,edgecolors='none')\\n",\
+    "        plt.xlabel(\\"# of successive rewards at some location\\")\\n",\
+    "        plt.ylabel(\\"Proportion\\\\n correct\\")\\n",\
+    "        plt.ylim(0.1,1.1)\\n",\
+    "        seaborn.despine()\\n",\
+    "        plt.plot(gaussian_filter1d(y,2.25,mode='nearest'),linewidth=1)\\n",\
+    "    y_dat = y_dat.append(y_DAT)"\
+   ]\
+  \},\
+  \{\
+   "cell_type": "code",\
+   "execution_count": null,\
+   "metadata": \{\},\
+   "outputs": [],\
+   "source": [\
+    "low = 1\\n",\
+    "num_correct = pd.DataFrame()\\n",\
+    "num_decisions = pd.DataFrame()\\n",\
+    "\\n",\
+    "count_arr = []\\n",\
+    "\\n",\
+    "for session in DF.index:\\n",\
+    "    num_corr = []\\n",\
+    "    num_dec = []\\n",\
+    "    counter = 0\\n",\
+    "    for rew_segment in np.arange(len(DF.trial_rew_change_end[session])):\\n",\
+    "        upp = int(DF.trial_rew_change_end[session][rew_segment])\\n",\
+    "        perf = DF.trial_perf[session][low:upp]\\n",\
+    "        count = DF.trial_dec_count[session][low:upp]\\n",\
+    "        correct = (np.asarray(perf))*(np.asarray(count))\\n",\
+    "        low = upp + 1\\n",\
+    "        num_corr.append(correct)\\n",\
+    "        num_dec.append(count)\\n",\
+    "        counter = counter + 1\\n",\
+    "    count_arr.append(counter)\\n",\
+    "    print(session,counter)\\n",\
+    "    score = pd.DataFrame(num_corr)/pd.DataFrame(num_dec)\\n",\
+    "    mn_score = np.nanmean(score,0)\\n",\
+    "    plt.scatter(np.arange(len(mn_score)),mn_score)\\n",\
+    "    plt.ylim(0.45,1.05)\\n",\
+    "    plt.xlim(-1,23.5)\\n",\
+    "    plt.show()\\n",\
+    "    num_correct = num_correct.append(num_corr)\\n",\
+    "    num_decisions = num_decisions.append(num_dec)"\
+   ]\
+  \},\
+  \{\
+   "cell_type": "code",\
+   "execution_count": null,\
+   "metadata": \{\},\
+   "outputs": [],\
+   "source": [\
+    "mean_score = np.asarray(num_correct.sum(axis=0))/np.asarray(num_decisions.sum(axis=0))\\n",\
+    "x = np.arange(len(mean_score))\\n",\
+    "\\n",\
+    "plt.scatter(x, mean_score, color='k',s=10,edgecolors='none')\\n",\
+    "\\n",\
+    "plt.xlabel(\\"# of successive rewards at some location\\")\\n",\
+    "plt.ylabel(\\"Proportion \\\\n correct\\")\\n",\
+    "plt.ylim(0.45,1.05)\\n",\
+    "plt.xlim(-1,23.5)\\n",\
+    "seaborn.despine()\\n",\
+    "plt.plot(gaussian_filter1d(mean_score,2.25,mode='nearest'),linewidth=1)"\
+   ]\
+  \},\
+  \{\
+   "cell_type": "code",\
+   "execution_count": null,\
+   "metadata": \{\},\
+   "outputs": [],\
+   "source": [\
+    "y = np.nanmean(y_dat, 0)\\n",\
+    "x = np.arange(len(y))\\n",\
+    "plt.scatter(x, y, color='k',s=10,edgecolors='none')\\n",\
+    "plt.xlabel(\\"# of successive rewards at some location\\")\\n",\
+    "plt.ylabel(\\"Proportion correct \\\\n (each trial counts the same)\\")\\n",\
+    "plt.ylim(0.45,1.05)\\n",\
+    "plt.xlim(-1,23.5)\\n",\
+    "seaborn.despine()\\n",\
+    "plt.plot(gaussian_filter1d(y,2.25,mode='nearest'),linewidth=1)"\
+   ]\
+  \},\
+  \{\
+   "cell_type": "code",\
+   "execution_count": null,\
+   "metadata": \{\},\
+   "outputs": [],\
+   "source": [\
+    "print(\\"Plot perf for each section of reward location\\")\\n",\
+    "low = 0\\n",\
+    "for i in np.arange(len(DF.trial_rew_change_end[index])):\\n",\
+    "    upp = int(DF.trial_rew_change_end[index][i]-1)\\n",\
+    "    x = np.arange(upp-low)\\n",\
+    "    y = DF.trial_perf[index][low:upp]\\n",\
+    "    low = upp\\n",\
+    "    \\n",\
+    "    plt.scatter(x, y,color='k',s=128,edgecolors='none')\\n",\
+    "    plt.xlabel(\\"# of successive rewards at some location\\")\\n",\
+    "    plt.ylabel(\\"Proportion\\\\n correct\\")\\n",\
+    "    plt.ylim(.3,1.1)\\n",\
+    "    seaborn.despine()\\n",\
+    "    plt.show()\\n"\
+   ]\
+  \},\
+  \{\
+   "cell_type": "code",\
+   "execution_count": null,\
+   "metadata": \{\},\
+   "outputs": [],\
+   "source": []\
+  \},\
+  \{\
+   "cell_type": "code",\
+   "execution_count": null,\
+   "metadata": \{\},\
+   "outputs": [],\
+   "source": []\
+  \}\
+ ],\
+ "metadata": \{\
+  "kernelspec": \{\
+   "display_name": "Python 3",\
+   "language": "python",\
+   "name": "python3"\
+  \},\
+  "language_info": \{\
+   "codemirror_mode": \{\
+    "name": "ipython",\
+    "version": 3\
+   \},\
+   "file_extension": ".py",\
+   "mimetype": "text/x-python",\
+   "name": "python",\
+   "nbconvert_exporter": "python",\
+   "pygments_lexer": "ipython3",\
+   "version": "3.8.5"\
+  \}\
+ \},\
+ "nbformat": 4,\
+ "nbformat_minor": 4\
+\}\
+}

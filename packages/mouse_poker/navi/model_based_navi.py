@@ -197,7 +197,7 @@ def model_based_analysis_single_session(state_seq,rew_list,forced_seq,
 
     #organise data into trials
     rewarded_pokes = np.where(rew_list)[0]
-    trial_starts = np.concatenate([[0],rewarded_pokes[:-1]])
+    trial_starts = np.concatenate([[0],rewarded_pokes[:-2]])
     trial_ends = rewarded_pokes
 
 
@@ -233,8 +233,7 @@ def model_based_analysis_single_session(state_seq,rew_list,forced_seq,
         visited_states = []
         prev_rew_loc_in_seq = False
 
-        if rew_loc!=state_seq[st+1]:
-
+        if rew_loc!=state_seq[st+1] and rew_loc:
             for pk_ctr in range(st+1,nd):  #for each poke between two rewards  
 
                 d0,d1,_ = get_st_dist(state_seq,pk_ctr,rew_loc)
@@ -242,15 +241,22 @@ def model_based_analysis_single_session(state_seq,rew_list,forced_seq,
                 state = state_seq[pk_ctr]
                 next_state = state_seq[pk_ctr+1]
                 
-                if ((not prev_rew_loc_in_seq) and (state==prev_diff_rew_loc)):
+                #if ((not prev_rew_loc_in_seq) and (state==prev_diff_rew_loc)):
+                #    prev_rew_loc_in_seq = True
+                #else:
+                #    prev_rew_loc_in_seq = False
+
+                if state==prev_diff_rew_loc:
                     prev_rew_loc_in_seq = True
+                else:
+                    prev_rew_loc_in_seq = False
 
 
                 same_as_prev_pol = policy_changed_with_rew_loc(pk_ctr,state_seq,rew_loc,prev_diff_rew_loc,if_is_rew_loc=if_is_rew_loc)
                 if np.abs(state-next_state)!=1:
                     print(state,next_state,rew_list[pk_ctr])
                 #check1.append(np.abs(state-next_state))
-                inclusion_condition_list = [free_choice_trial,              #NOT a forced trial
+                inclusion_condition_list = [free_choice_trial,          #NOT a forced trial
                                         prev_diff_rew_loc is not None,  #ignore first block in session
                                         not same_as_prev_pol,           #ensure that this a policy change is required to make correct decision
                                         prev_direction is not None,     #make sure NOT looking at first run-to-rew after a block transition (when rew_loc is unknown)
@@ -262,7 +268,7 @@ def model_based_analysis_single_session(state_seq,rew_list,forced_seq,
                                         ((ignore_prev_rew_loc_in_seq) or (not prev_rew_loc_in_seq)),
                                         ]
 
-                
+                #print(inclusion_condition_list)
                 if all(inclusion_condition_list):
                     
                     if use_block_transitions:
@@ -284,10 +290,12 @@ def model_based_analysis_single_session(state_seq,rew_list,forced_seq,
                         t_p = 1-t_p
                     
                     #only include
-                    if not np.isnan(t_p):
-                        prob_array_for_pois_binom.append(t_p)
-                        choices.append(int(d1<d0))
-
+                    try:
+                        if not np.isnan(t_p):
+                            prob_array_for_pois_binom.append(t_p)
+                            choices.append(int(d1<d0))
+                    except:
+                        pass
                     #These should be largely nans except because of bug in behaviour code, you can in some sessions
                     #start in the rewarded state
 
@@ -303,6 +311,7 @@ def model_based_analysis_single_session(state_seq,rew_list,forced_seq,
                         print('state:{},nextstate:{},rew_loc:{},prev_rew_loc:{},correct:{},prev_tp:{}'.format(*print_list))
                         #print(pk_ctr,os.path.split(fpath)[-1])
                         print(state_seq[st-1:nd+1],st,pk_ctr)
+                        #print(forced_seq[st-1:nd+1],st,pk_ctr)
                         print(rew_list[st-1:nd+1])
 
                         print('\n')
